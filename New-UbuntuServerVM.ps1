@@ -1,11 +1,12 @@
 param (
-  [string] $DownloadFolder = "$HOME",
+  [string] $DownloadFolder = "$HOME\VM",
   [string] [Parameter(Mandatory=$true)] $VMName,
   [bool] $CloudInit = $true,
   $VMHardDiskSize = 25GB,
   $VMRamSize = 4GB,
-  [string] $VMSwitch = "Default Switch",
-  [bool] $Provision = $true
+  [string] $VMSwitch = "Virtual Switch",
+  [bool] $Provision = $true,
+  [switch] $Delete
 )
 
 #Requires -RunAsAdministrator
@@ -15,6 +16,7 @@ param (
 [System.String] $oscdimg = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
 [System.String] $global:output_img = ""
 [System.String] $metadataIso = "$DownloadFolder\metadata.iso"
+[System.String] $workingDirectory = "$DownloadFolder\$VMName"
 
 $Ubuntu = @{
   Name = "";
@@ -29,18 +31,69 @@ if (!(Test-Path $oscdimg)) {
 
 $metadata = @"
 instance-id: iid-123456
-local-hostname: ubuntu-vm
+local-hostname: yuh-m
 "@
 
 $userdata = @"
 #cloud-config
-password: passw0rd
+
+users:
+  - name: admin
+    lock_passwd: false
+    plain_text_passwd: passw0rd!
+    ssh-authorized-keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICewR4jtOkn+rjZDwRrXtANUCsTrOz0nSmpq2BIE607u ricardo.valdovinos@aall.net
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    groups: sudo
+    shell: /bin/bash
 runcmd:
- - [ useradd, -m, -p, "", dev ]
- - [ chage, -d, 0, dev ]
+  - sed -i -e '/^Port/s/^.*$/Port 4444/' /etc/ssh/sshd_config
+  - sed -i -e '/^PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
+  - sed -i -e '$aAllowUsers demo' /etc/ssh/sshd_config
+  - restart ssh
+write_files:
+  - path: /etc/ssh/sshd_config
+    content: |
+          Port 4444
+          Protocol 2
+          HostKey /etc/ssh/ssh_host_rsa_key
+          HostKey /etc/ssh/ssh_host_dsa_key
+          HostKey /etc/ssh/ssh_host_ecdsa_key
+          HostKey /etc/ssh/ssh_host_ed25519_key
+          UsePrivilegeSeparation yes
+          KeyRegenerationInterval 3600
+          ServerKeyBits 1024
+          SyslogFacility AUTH
+          LogLevel INFO
+          LoginGraceTime 120
+          PermitRootLogin no
+          StrictModes yes
+          RSAAuthentication yes
+          PubkeyAuthentication yes
+          IgnoreRhosts yes
+          RhostsRSAAuthentication no
+          HostbasedAuthentication no
+          PermitEmptyPasswords no
+          ChallengeResponseAuthentication no
+          X11Forwarding yes
+          X11DisplayOffset 10
+          PrintMotd no
+          PrintLastLog yes
+          TCPKeepAlive yes
+          AcceptEnv LANG LC_*
+          Subsystem sftp /usr/lib/openssh/sftp-server
+          UsePAM yes
+          AllowUsers demo
 "@
 
 function main {
+  if ($Delete) {
+    Write-Host "Deleting: $workingDirectory"
+    Remove-Item -Force -Recurse -Path "$workingDirectory"
+    return
+  }
+  New-Root-Directory
+  New-Working-Directory
   Get-Required-Tools
   Get-Latest-Ubuntu-LTS
   $img_file = Get-Ubuntu
@@ -52,6 +105,14 @@ function main {
   Set-Boot-ISO
   Set-Boot-Order
   Start-Ubuntu-VM
+}
+
+function New-Root-Directory {
+  New-Item -ItemType Directory -Force -Path $DownloadFolder
+}
+
+function New-Working-Directory {
+  New-Item -ItemType Directory -Force -Path "$DownloadFolder\$VMName"
 }
 
 function Get-Required-Tools {
@@ -109,21 +170,23 @@ function Get-Ubuntu {
     Invoke-WebRequest -URI $download_url -OutFile $download_file
     Write-Host "Saved file to $download_file"
   }
-  return $download_file
+  Copy-Item $download_file -Destination $workingDirectory -Force
+  Write-Host "Placed copy into: $workingDirectory"
+  return "$download_file"
 }
 
 function Set-CloudInit {
-  if (Test-Path $metaDataIso) {
-    Write-Host "cloudinit ISO exists: $metaDataIso"
-    return
-  }
   $metadata_dir = "$env:temp\vm-metadata"
 
   New-Item -ItemType Directory -Force -Path $metadata_dir
   Set-Content "$metadata_dir\meta-data" ([byte[]][char[]] "$metadata") -Encoding Byte
+  Write-Host "Writing meta-data to: $metadata_dir\meta-data"
   Set-Content "$metadata_dir\user-data" ([byte[]][char[]] "$userdata") -Encoding Byte
+  Write-Host "Writing user-data to: $metadata_dir\user-data"
 
   & $oscdimg "$metadata_dir" $metaDataIso -j2 -lcidata
+  Copy-Item $metaDataIso -Destination $workingDirectory -Force
+  Write-Host "Placed copy into: $workingDirectory"
 }
 
 function Convert-VMDK-To-VHDX  {
@@ -131,22 +194,29 @@ function Convert-VMDK-To-VHDX  {
   $global:output_img = $img_file -replace ".img", ".vhdx"
   if (Test-Path $output_img) {
     Write-Host "VHDX file exists: $output_img"
+    Copy-Item $output_img -Destination $workingDirectory -Force
+    Write-Host "Placed copy into: $workingDirectory"
     return
   }
   Write-Host "converting .img file to .vhdx"
   & "$qemu_file" convert -f qcow2 $img_file -O vhdx -o subformat=dynamic $output_img
   Write-Host "converted file at: $output_img"
+
+  Copy-Item $output_img -Destination $workingDirectory -Force
+  Write-Host "Placed copy into: $workingDirectory"
 }
 
 function New-Ubuntu-VM {
   $exists = Get-VM -Name $VMName -ErrorAction SilentlyContinue
   if ($exists) {
     Write-Host "VM exists: $VMName"
+    Remove-VM -VMName $VMName -Force
     return
   }
   Write-Host "Creating new Ubuntu VM: $VMName"
   if ($Provision) {
-    New-VM -VHDPath $global:output_img -Name $VMName -Generation 2 -MemoryStartupBytes $VMRamSize -SwitchName $VMSwitch
+    $LTSVersion = $Ubuntu['Version']
+    New-VM -VHDPath "$workingDirectory\ubuntu-$LTSVersion.vhdx" -Name $VMName -Generation 2 -MemoryStartupBytes $VMRamSize -SwitchName $VMSwitch
   } else {
     New-VM -NewVHDPath "$VMName.vhdx" -Name $VMName -NewVHDSizeBytes $VMHardDiskSize -Generation 2 -MemoryStartupBytes $VMRamSize -SwitchName $VMSwitch
   }
@@ -173,10 +243,10 @@ function Set-Boot-ISO {
 
 function Set-Boot-Order {
   $disks = (Get-VMDvdDrive -VMName $VMName)
-  $VMComponent = ""
   $index = 0
   foreach ($disk in $disks.Path) {
     if ($disk -eq $metadataIso) {
+      Write-Host "found: $disk"
       break
     }
     $index += 1
