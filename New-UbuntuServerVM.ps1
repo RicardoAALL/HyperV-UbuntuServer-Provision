@@ -116,15 +116,25 @@ function New-Working-Directory {
 }
 
 function Get-Required-Tools {
-  if (Test-Path $qemu_file) {
+  if (!(Test-Path $qemu_file)) {
+    $qemu_download = "$env:temp\qemu-img.zip"
+    $ProgressPreference = 'SilentlyContinue'
+    Invoke-WebRequest -URI "https://cloudbase.it/downloads/qemu-img-win-x64-2_3_0.zip" -OutFile $qemu_download
+    Expand-Archive -LiteralPath $qemu_download -DestinationPath $qemu_folder
+    Write-Host "qemu-img downloaded to: $qemu_folder"
+  } else {
     Write-Host "qemu-img already installed"
-    return
   }
-  $qemu_download = "$env:temp\qemu-img.zip"
-  $ProgressPreference = 'SilentlyContinue'
-  Invoke-WebRequest -URI "https://cloudbase.it/downloads/qemu-img-win-x64-2_3_0.zip" -OutFile $qemu_download
-  Expand-Archive -LiteralPath $qemu_download -DestinationPath $qemu_folder
-  Write-Host "qemu-img downloaded to: $qemu_folder"
+
+  if (!(Test-Path $oscdimg)) {
+    $adk_download = "$env:temp\adksetup.exe"
+    $ProgressPreference = 'SilentlyContinue'
+    Invoke-WebRequest -URI "https://go.microsoft.com/fwlink/?linkid=2196127" -OutFile $adk_download
+    & $adk_download /quiet /features OptionId.DeploymentTools
+    Write-Host "Windows ADK (oscdimg.exe) downloaded to: $qemu_folder"
+  } else {
+    Write-Host "Windows ADK (oscdimg.exe) already installed"
+  }
 }
 
 function Get-Latest-Ubuntu-LTS {
@@ -255,7 +265,7 @@ function Set-Boot-Order {
 }
 
 function Start-Ubuntu-VM {
-  Start-VM -VMName $VMName
+  # Start-VM -VMName $VMName
 }
 
 main
