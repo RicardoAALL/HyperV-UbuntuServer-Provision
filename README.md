@@ -25,6 +25,12 @@ The `-VMName` parameter is mandatory.
 ## Defaults
 
 This script creates a basic, barebones Ubuntu Server VM with the following defaults if not specified:
+- **System**:
+  - *root folder*: $HOME\VM
+- **VM**
+  - *storage*: 25G
+  - *RAM*: 4G
+  - *network switch*: Default Switch
 - **Admin User**
   - *username*: user
   - *password*: passw0rd!
