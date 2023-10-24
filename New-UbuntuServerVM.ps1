@@ -3,6 +3,8 @@ param (
   [object] $VMHardDiskSize = 25GB,
   [object] $VMRamSize = 4GB,
   [string] $VMSwitch = "Default Switch",
+  [string] $VMCPUCount = 1,
+  [switch] $DynamicMemory,
   [string] $RootFolder = "$HOME\VM",
   [string] $PublicSSHKey,
   [int] $SSHPort = 4444
@@ -219,6 +221,8 @@ if (Get-VM -Name $VMName -ErrorAction SilentlyContinue) {
 Write-Host "Creating new Ubuntu VM: $VMName"
 
 New-VM -VHDPath "$working_directory\ubuntu-$LTSVersion.vhdx" -Name $VMName -Generation 2 -MemoryStartupBytes $VMRamSize -SwitchName $VMSwitch
+Set-VMProcessor -VMName $VMName -Count $VMCPUCount
+Set-VMMemory -VMName $VMName -DynamicMemoryEnabled $DynamicMemory
 Set-Vm -Name $VMName
 Write-Host "Finished creating VM: $VMName"
 
