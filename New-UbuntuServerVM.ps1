@@ -58,7 +58,7 @@ if (Test-Path $qemu_file) {
   Write-Host "qemu-img downloaded to: $qemu_folder"
 }
 
-# Download Windows ADK (oscdimg.exe - used to create ) if not found
+# Download Windows ADK (oscdimg.exe - used to create metadata ISO) if not found
 if (Test-Path $oscdimg_file) {
   Write-Host "Windows ADK (oscdimg.exe) already installed"
 } else {
@@ -66,7 +66,7 @@ if (Test-Path $oscdimg_file) {
   $ProgressPreference = 'SilentlyContinue'
   Invoke-WebRequest -URI "https://go.microsoft.com/fwlink/?linkid=2196127" -OutFile $adk_download
   & $adk_download /quiet /features OptionId.DeploymentTools
-  Write-Host "Windows ADK (oscdimg.exe) downloaded to: $qemu_folder"
+  Write-Host "Windows ADK (oscdimg.exe) downloaded to: $oscdimg"
 }
 
 # Download Ubuntu Server LTS if not found
