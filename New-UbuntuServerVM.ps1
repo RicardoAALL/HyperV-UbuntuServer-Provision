@@ -4,7 +4,7 @@ param (
   [object] $VMRamSize = 4GB,
   [string] $VMSwitch = "Default Switch",
   [string] $VMCPUCount = 1,
-  [switch] $DynamicMemory,
+  [bool] $VMDynamicMemory,
   [string] $RootFolder = "$HOME\VM",
   [string] $PublicSSHKey,
   [int] $SSHPort = 4444
@@ -58,7 +58,7 @@ if (Test-Path $qemu_file) {
   Write-Host "qemu-img downloaded to: $qemu_folder"
 }
 
-# Download Windows ADK (oscdimg.exe - used to create metadata ISO) if not found
+# Download Windows ADK (oscdimg.exe - used to create ) if not found
 if (Test-Path $oscdimg_file) {
   Write-Host "Windows ADK (oscdimg.exe) already installed"
 } else {
@@ -66,7 +66,7 @@ if (Test-Path $oscdimg_file) {
   $ProgressPreference = 'SilentlyContinue'
   Invoke-WebRequest -URI "https://go.microsoft.com/fwlink/?linkid=2196127" -OutFile $adk_download
   & $adk_download /quiet /features OptionId.DeploymentTools
-  Write-Host "Windows ADK (oscdimg.exe) downloaded to: $oscdimg"
+  Write-Host "Windows ADK (oscdimg.exe) downloaded to: $qemu_folder"
 }
 
 # Download Ubuntu Server LTS if not found
@@ -222,7 +222,7 @@ Write-Host "Creating new Ubuntu VM: $VMName"
 
 New-VM -VHDPath "$working_directory\ubuntu-$LTSVersion.vhdx" -Name $VMName -Generation 2 -MemoryStartupBytes $VMRamSize -SwitchName $VMSwitch
 Set-VMProcessor -VMName $VMName -Count $VMCPUCount
-Set-VMMemory -VMName $VMName -DynamicMemoryEnabled $DynamicMemory
+Set-VMMemory -VMName $VMName -DynamicMemoryEnabled $VMDynamicMemory
 Set-Vm -Name $VMName
 Write-Host "Finished creating VM: $VMName"
 
